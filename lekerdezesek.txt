@@ -1,0 +1,178 @@
+----edzesfajtak, amik rovidebbek 50 percnel------------------------------------------------------------------
+SELECT  *
+FROM edzestipus
+where hossza_perc < 50;
+
+----legregebbi kliens----------------------------------------------------------------------------------------
+SELECT  *
+FROM kliens
+ORDER BY regisztralt DESC
+FETCH FIRST 1 ROWS ONLY;
+
+----nev alapjan milyen tipusu edzesre volt mar valaki--------------------------------------------------------
+SELECT et.nev
+FROM kliens k
+JOIN belepes b ON k.id = b.kliens_id
+JOIN csoportedzes cse ON b.id = cse.id
+JOIN edzestipus et ON cse.tipus_id = et.id
+where k.v_nev || ' ' || k.k_nev = 'Kiss Janos';
+
+----nev alapjan a hany edzesre volt valaki-------------------------------------------------------------------
+SELECT COUNT(*) as "Alkalmak"
+FROM kliens k
+JOIN belepes b ON k.id = b.kliens_id
+where k.v_nev || ' ' || k.k_nev = 'Kiss Janos'
+GROUP BY b.kliens_id;
+
+----legidosebb kliens email cime-----------------------------------------------------------------------------
+SELECT v_nev || ' ' || k_nev as "Kliens neve", email
+FROM kliens
+ORDER BY szuletes_nap
+FETCH FIRST 1 ROWS ONLY;
+
+----kliensek, felsorolva, ki hany edzesre jart---------------------------------------------------------------
+SELECT k.v_nev || ' ' || k.k_nev as "Kliens nev", q."Alkalmak" as "Latogatasok szama:"
+FROM kliens k
+JOIN (
+    SELECT b.kliens_id, COUNT(*) as "Alkalmak"
+    FROM kliens k
+    JOIN belepes b ON k.id = b.kliens_id
+    GROUP BY b.kliens_id
+    ) q
+ON k.id = q.kliens_id;
+
+----legjobban vasarlo 5 kliens-------------------------------------------------------------------------------
+SELECT v.kliens_id, SUM(vt.menyiseg * t.ar)
+FROM vasarlas v
+JOIN vasarlas_termek vt ON v.id = vt.v_id
+JOIN termek t ON vt.t_id = t.id
+GROUP BY v.kliens_id
+ORDER BY SUM(vt.menyiseg * t.ar) desc
+FETCH FIRST 5 ROWS ONLY;
+
+----utolso edzes-re kik jartak-------------------------------------------------------------------------------
+SELECT k.v_nev, k.k_nev, k.email
+FROM kliens k JOIN belepes b ON k.id = b.kliens_id
+where b.csoport_id = (
+        SELECT id
+        FROM csoportedzes
+        ORDER BY idopont desc
+        FETCH FIRST 1 ROWS ONLY
+);
+
+----legtobbet vasarolt termekek(legnepszerubb)---------------------------------------------------------------
+SELECT t.nev as "Termek neve", COUNT(vt.menyiseg) as "Megvasarolt mennyiseg"
+FROM vasarlas v
+JOIN vasarlas_termek vt ON v.id = vt.v_id
+JOIN termek t ON vt.t_id = t.id
+GROUP BY t.nev
+ORDER BY COUNT(vt.menyiseg) DESC;
+
+----melyik alkalmazott tart a legtobb edzest-----------------------------------------------------------------
+SELECT a.id, COUNT(*)
+FROM csoportedzes cse 
+JOIN alkalmazott a ON cse.alkalmazott_id = a.id
+GROUP BY a.id;
+
+----ki mennyi ertekre vasarolt osszesen----------------------------------------------------------------------
+SELECT v.kliens_id, SUM(vt.menyiseg * t.ar) as "ERTEK"
+FROM vasarlas v
+JOIN vasarlas_termek vt ON v.id = vt.v_id
+JOIN termek t ON vt.t_id = t.id
+GROUP BY v.kliens_id;
+
+----adott kliens milyen termekeket vasarolt------------------------------------------------------------------
+SELECT t.nev
+FROM vasarlas v
+JOIN vasarlas_termek vt ON v.id = vt.v_id
+JOIN termek t ON vt.t_id = t.id
+JOIN kliens k ON v.kliens_id = k.id
+WHERE k.v_nev || ' ' || k.k_nev = 'Kiss Janos';
+
+----adott teremben milyen edzes volt utoljara es mikor-------------------------------------------------------
+SELECT t.nr as "Terem szama", et.nev as "Edzes tipus", MIN(cse.idopont) as "Az edzes napja"
+FROM csoportedzes cse 
+JOIN terem t ON cse.alkalmazott_id = t.id
+JOIN edzestipus et ON cse.tipus_id = et.id
+GROUP BY t.nr, et.nev;
+
+----milyen tipusu edzesre hanyan jarnak----------------------------------------------------------------------
+SELECT et.nev, COUNT(*)
+FROM csoportedzes cse
+JOIN edzestipus et ON cse.tipus_id = et.id
+JOIN belepes b ON cse.id = b.csoport_id
+GROUP BY et.nev;
+
+----adott datumon melyik termek elerhetoek es mekkora belterrel rendelkeznek---------------------------------
+SELECT t.nr as "Terem:", t.szeles*t.hossz as "m2", TO_CHAR(cse.idopont, 'HH24:MI:SS') as "Idopont kezdete",
+to_char(et.hossza_perc) as "Edzes hossza percben"
+FROM csoportedzes cse
+JOIN terem t ON cse.terem_id = t.id
+JOIN edzestipus et ON cse.tipus_id = et.id;
+
+----azokat a szemelyekeet keresem, akiknek a csaladneve [Sz]el kezdodik--------------------------------------
+SELECT *
+FROM kliens
+WHERE v_nev like 'K%'
+
+UNION
+
+SELECT *
+FROM alkalmazott
+WHERE v_nev like 'K%';
+
+----ki vasarolt jobban mint 'Katona Lajos'-------------------------------------------------------------------
+SELECT k.v_nev||' '||k.k_nev, SUM(vt.menyiseg * t.ar)
+FROM vasarlas v
+JOIN vasarlas_termek vt ON v.id = vt.v_id
+JOIN termek t ON vt.t_id = t.id
+JOIN kliens k ON v.kliens_id = k.id
+GROUP BY k.v_nev||' '||k.k_nev
+HAVING SUM(vt.menyiseg * t.ar) > 
+    (
+    SELECT SUM(t.ar * vt.menyiseg)
+    FROM vasarlas v
+    JOIN vasarlas_termek vt ON v.id = vt.v_id
+    JOIN termek t ON vt.t_id = t.id
+    where v.kliens_id =
+            (
+                SELECT id
+                FROM kliens
+                where v_nev||' '||k_nev = 'Katona'||' '||'Lajos'
+            )
+    );
+
+----melyik teremben hany edzes volt eddig--------------------------------------------------------------------
+SELECT t.nr, COUNT(*)
+FROM csoportedzes cse 
+JOIN terem t ON cse.alkalmazott_id = t.id
+GROUP BY t.nr;
+
+----Katona Ferenc utolso edzesenek a resztvevoinek az elerhetosege-------------------------------------------
+SELECT k.v_nev||' '||k.k_nev as "Kliens nev", k.email, k.tel
+FROM belepes b
+JOIN kliens k ON b.kliens_id = k.id
+where b.csoport_id = 
+(
+    SELECT cse.id
+    FROM csoportedzes cse
+    JOIN alkalmazott a ON cse.alkalmazott_id = a.id
+    where a.v_nev||' '||a.k_nev = 'Katona Ferenc'
+    ORDER BY idopont desc
+    FETCH FIRST 1 ROWS ONLY
+);
+
+----azoknak a klienseknek az id-jat akik nem vasaroltak vitamin keszitmenyt----------------------------------
+SELECT v_nev||' '||k_nev
+FROM kliens
+
+MINUS
+
+SELECT distinct k.v_nev||' '||k.k_nev
+FROM kliens k
+JOIN vasarlas v ON k.id = v.kliens_id
+JOIN vasarlas_termek vt ON v.id = vt.v_id
+JOIN termek t ON vt.t_id = t.id
+WHERE t.nev like '%vitamin%';
+
+-------------------------------------------------------------------------------------------------------------
